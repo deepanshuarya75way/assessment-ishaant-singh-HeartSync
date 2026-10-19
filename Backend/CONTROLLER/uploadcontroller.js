@@ -1,50 +1,80 @@
-// CONTROLLER/uploadcontroller.js
-import fs from 'fs';
-import path from 'path';
-import multer from 'multer';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-const upload=multer({
-  storage:multer.diskStorage({
-    destination:(req,file,cb)=>{
-      cb(null,"Backend/Bakend/data");
-    },
-    filename:(req,file,cb)=>{
-      const crypto =require("crypto");
-      cb(null,crypto.randomUUID()+".txt");
+// CONTROLLER/.. is the project root.
+const uploadDir = path.resolve(__dirname, '..', 'data');
+
+export const handleUpload = async (req, res) => {
+  try {
+    const {
+      email,
+      lovedOneName,
+      relationship,
+      personality,
+      interests
+    } = req.body;
+
+    if (!email || !email.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required.'
+      });
     }
-  }),
-  limits:{
-    fileSize:2*1024*1024,file:1
-  },
-  fileFilter:(req,file,cb)=>{
-    const allowed=new Set([
-      "text/plain","text/csv",
-      "application/json"
-    ]);
-    if(!allowed.has(file.mimetype)){
-      return cb(new Error ("Unsupported file type:"));
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please upload a chat file.'
+      });
     }
-    cb(null,true);
+
+    await fs.mkdir(uploadDir, { recursive: true });
+
+    const safeEmail = email.trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+
+    const userInfo = {
+      email: email.trim(),
+      lovedOneName,
+      relationship,
+      personality,
+      interests
+    };
+
+    const infoPath = path.join(
+      uploadDir,
+      `${safeEmail}_info.json`
+    );
+
+    const chatPath = path.join(
+      uploadDir,
+      `${safeEmail}_chat.txt`
+    );
+
+    // Save the user information.
+    await fs.writeFile(
+      infoPath,
+      JSON.stringify(userInfo, null, 2),
+      'utf8'
+    );
+
+    // Move the file saved by Multer into its final location.
+    await fs.rename(req.file.path, chatPath);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Data uploaded and saved successfully.'
+    });
+
+  } catch (error) {
+    console.error('Upload controller error:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: 'Unable to save the uploaded chat file.'
+    });
   }
-});
-export const handleUpload = (req, res) => {
-  const { email, lovedOneName, relationship, personality, interests } = req.body;
-
-  const safeEmail = email.replace(/[^a-zA-Z0-9]/g, '_');
-  const uploadDir = path.join('Backend', 'data');
-
-  // Save info
-  const userInfo = { email, lovedOneName, relationship, personality, interests };
-  const infoPath = path.join(uploadDir, `${safeEmail}_info.json`);
-  fs.writeFileSync(infoPath, JSON.stringify(userInfo, null, 2));
-
-  // Rename chat file
-  if (req.file) {
-    const newChatPath = path.join(uploadDir, `${safeEmail}_chat.txt`);
-    fs.renameSync(req.file.path, newChatPath);
-  }
-
-  // ✅ THIS LINE FIXES YOUR ISSUE
-  res.json({ success: true, message: "Data uploaded and saved successfully." });
 };

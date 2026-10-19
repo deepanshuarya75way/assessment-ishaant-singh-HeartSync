@@ -1,83 +1,154 @@
-// Show selected file name
-document.getElementById("chatHistory").addEventListener("change", function (e) {
-  const file = e.target.files[0];
-  if (file) {
-    const label = e.target.nextElementSibling;
-    label.textContent = `📁 ${file.name} selected`;
-  }
-});
-//consent
-const consent=document.getElementById("privacyConsent");
-if(!consent || !consent.checked){
-  alert("Plese provide privacy consent before continuing");
-  return;
-}
-// Handle form submission
-document.getElementById("loginForm").addEventListener("submit", async function (e) {
-  e.preventDefault(); // prevent default refresh
-
+document.addEventListener("DOMContentLoaded", () => {
   const fileInput = document.getElementById("chatHistory");
-  const chatFile = fileInput.files[0];
+  const loginForm = document.getElementById("loginForm");
+  const consent = document.getElementById("privacyConsent");
 
-  if (!chatFile) {
-    alert("❌ Please select a chat file to upload.");
-    return;
-  }
-
-  const formData = new FormData();
-  formData.append("chatFile", chatFile); // MUST match multer field name
-
-  // Append all other user inputs
-  formData.append("email", document.getElementById("email").value);
-  formData.append("lovedOneName", document.getElementById("lovedOneName").value);
-  formData.append("relationship", document.getElementById("relationship").value);
-  formData.append("personality", document.getElementById("personality").value);
-  formData.append("interests", document.getElementById("interests").value);
-
-  // Get and validate API key
-  const geminiApiKey = document.getElementById("geminiApiKey").value.trim();
-  if (!geminiApiKey) {
-    alert("❌ Please enter your Gemini API key.");
-    return;
-  }
-
-  // Store API key securely in sessionStorage
-  sessionStorage.setItem("gemini_api_key", geminiApiKey);
-
-  try {
-    // Get backend URL from environment or default to localhost
-    const backendUrl = window.BACKEND_URL || "http://localhost:5000";
-    
-    const response = await fetch(`${backendUrl}/upload-chat`, {
-      method: "POST",
-      headers: {
-        "x-gemini-api-key": geminiApiKey
-      },
-      body: formData,
+  // Make sure the required HTML elements exist.
+  if (!fileInput || !loginForm || !consent) {
+    console.error("Missing HTML element:", {
+      chatHistory: !!fileInput,
+      loginForm: !!loginForm,
+      privacyConsent: !!consent
     });
-
-    const result = await response.json();
-
-    if (result.success) {
-      console.log("✅ File uploaded and user data saved.");
-
-      // Save user data in localStorage for chat.html
-      localStorage.setItem("heartsyncUserData", JSON.stringify({
-        email: formData.get("email"),
-        lovedOneName: formData.get("lovedOneName"),
-        relationship: formData.get("relationship"),
-        personality: formData.get("personality"),
-        interests: formData.get("interests"),
-        fileName: chatFile.name
-      }));
-
-      // Redirect to chat.html
-      window.location.href = "chat.html";
-    } else {
-      alert("❌ Upload failed: " + result.message);
-    }
-  } catch (err) {
-    console.error("❌ Upload error:", err);
-    alert("Upload failed. Make sure your server is running.");
+    return;
   }
+
+  // Show selected file name.
+  fileInput.addEventListener("change", function () {
+    const file = this.files[0];
+    const label = this.nextElementSibling;
+
+    if (file && label) {
+      label.textContent = `📁 ${file.name} selected`;
+    }
+  });
+
+  // Handle login form submission.
+  loginForm.addEventListener("submit", async function (e) {
+    e.preventDefault();
+
+    // Validate consent INSIDE the submit handler.
+    if (!consent.checked) {
+      alert("Please provide privacy consent before continuing.");
+      return;
+    }
+
+    const chatFile = fileInput.files[0];
+
+    if (!chatFile) {
+      alert("Please select a chat file to upload.");
+      return;
+    }
+
+    const email = document.getElementById("email").value.trim();
+    const lovedOneName =
+      document.getElementById("lovedOneName").value.trim();
+    const relationship =
+      document.getElementById("relationship").value;
+    const personality =
+      document.getElementById("personality").value;
+    const interests =
+      document.getElementById("interests").value;
+
+    const apiKeyInput = document.getElementById("geminiApiKey");
+    const geminiApiKey = apiKeyInput.value.trim();
+
+    if (!geminiApiKey) {
+      alert("Please enter your Gemini API key.");
+      return;
+    }
+
+    const formData = new FormData();
+
+    // IMPORTANT: Must match upload.single('chatFile') on the backend.
+    formData.append("chatFile", chatFile);
+
+    formData.append("email", email);
+    formData.append("lovedOneName", lovedOneName);
+    formData.append("relationship", relationship);
+    formData.append("personality", personality);
+    formData.append("interests", interests);
+
+    // Disable repeated submissions.
+    const submitButton = loginForm.querySelector(
+      'button[type="submit"], input[type="submit"]'
+    );
+
+    if (submitButton) {
+      submitButton.disabled = true;
+    }
+
+    try {
+      const backendUrl =
+        window.BACKEND_URL || "http://localhost:5000";
+
+      console.log("Uploading chat file...");
+
+      const response = await fetch(
+        `${backendUrl}/upload-chat`,
+        {
+          method: "POST",
+          headers: {
+            "x-gemini-api-key": geminiApiKey
+          },
+          body: formData
+        }
+      );
+
+      // Read response safely, including server error responses.
+      const responseText = await response.text();
+      let result;
+
+      try {
+        result = JSON.parse(responseText);
+      } catch {
+        throw new Error(
+          `Server returned an invalid response: ${responseText.slice(0, 200)}`
+        );
+      }
+
+      console.log("Upload response:", response.status, result);
+
+      if (!response.ok) {
+        throw new Error(
+          result.message || result.error ||
+          `Upload failed with status ${response.status}`
+        );
+      }
+
+      if (result.success !== true) {
+        throw new Error(
+          result.message || "The server did not confirm the upload."
+        );
+      }
+
+      // Save user details for the chat page.
+      localStorage.setItem(
+        "heartsyncUserData",
+        JSON.stringify({
+          email,
+          lovedOneName,
+          relationship,
+          personality,
+          interests,
+          fileName: chatFile.name
+        })
+      );
+
+      console.log("Upload successful. Redirecting to chat page...");
+
+      // Redirect to chat.html relative to the current page.
+      window.location.assign(
+        new URL("chat.html", window.location.href).href
+      );
+
+    } catch (error) {
+      console.error("Login/upload error:", error);
+      alert(`Unable to continue: ${error.message}`);
+    } finally {
+      if (submitButton) {
+        submitButton.disabled = false;
+      }
+    }
+  });
 });
