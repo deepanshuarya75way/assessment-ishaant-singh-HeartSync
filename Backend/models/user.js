@@ -7,6 +7,15 @@ const userSchema = new mongoose.Schema({
   relationship: String,
   personality: String,
   interests: String,
+  privacyConsentAt:{
+    type:Date,
+    default:null
+  },
+  dateRetentionUntil:{
+    type:Data,
+    default:null
+  }
+
 }, { timestamps: true });
 
 export default mongoose.model('User', userSchema);

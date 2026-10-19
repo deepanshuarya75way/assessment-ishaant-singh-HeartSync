@@ -6,7 +6,12 @@ document.getElementById("chatHistory").addEventListener("change", function (e) {
     label.textContent = `📁 ${file.name} selected`;
   }
 });
-
+//consent
+const consent=document.getElementById("privacyConsent");
+if(!consent || !consent.checked){
+  alert("Plese provide privacy consent before continuing");
+  return;
+}
 // Handle form submission
 document.getElementById("loginForm").addEventListener("submit", async function (e) {
   e.preventDefault(); // prevent default refresh
